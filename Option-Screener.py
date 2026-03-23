@@ -6,7 +6,8 @@ from scipy.stats import norm
 from datetime import datetime
 import time
 
-st.set_page_config(page_title="Options Scanner", layout="wide")
+st.set_page_config(page_title="Options Scanner", layout="centered")
+
 st.title("📊 Options Strategy Scanner")
 
 # ========= 输入 =========
@@ -65,23 +66,16 @@ def highlight(row):
         style = ""
 
         if row["sweet"] and row["liquid"]:
-            style = "background-color: #d4edda"  # 绿
+            style = "background-color: #d4edda"  # 🟢
 
         elif row["annualized_return"] > 20:
-            style = "background-color: #fff3cd"  # 黄
+            style = "background-color: #fff3cd"  # 🟡
 
         elif not row["liquid"]:
-            style = "background-color: #f8d7da"  # 红
+            style = "background-color: #f8d7da"  # 🔴
 
         styles.append(style)
     return styles
-
-# ========= 数字格式 =========
-def format_df(df):
-    df = df.copy()
-    num_cols = df.select_dtypes(include=[np.number]).columns
-    df[num_cols] = df[num_cols].round(2)
-    return df
 
 # ========= 主逻辑 =========
 if run:
@@ -190,31 +184,33 @@ if run:
     🔴 Low Liquidity  
     """)
 
-    col1, col2 = st.columns(2)
+    # ========= CALL =========
+    st.subheader("🔵 Covered Call")
 
-    with col1:
-        st.subheader("🔵 Covered Call")
-        calls_display = format_df(
-            calls[[
-                "strike","mid","upside","delta","volume","openInterest",
-                "IV","ratio","return_pct","annualized_return",
-                "call_return_pct","call_annualized","sweet","liquid"
-            ]].head(10)
-        )
-        st.dataframe(
-            calls_display.style.apply(highlight, axis=1),
-            use_container_width=True
-        )
+    st.dataframe(
+        calls[[
+            "strike","mid","upside","delta","volume","openInterest",
+            "IV","ratio","return_pct","annualized_return",
+            "call_return_pct","call_annualized","sweet","liquid"
+        ]]
+        .head(10)
+        .style
+        .format("{:.2f}")
+        .apply(highlight, axis=1),
+        use_container_width=True
+    )
 
-    with col2:
-        st.subheader("🟢 Cash Secured Put")
-        puts_display = format_df(
-            puts[[
-                "strike","mid","downside","delta","volume","openInterest",
-                "IV","ratio","return_pct","annualized_return","sweet","liquid"
-            ]].head(10)
-        )
-        st.dataframe(
-            puts_display.style.apply(highlight, axis=1),
-            use_container_width=True
-        )
+    # ========= PUT =========
+    st.subheader("🟢 Cash Secured Put")
+
+    st.dataframe(
+        puts[[
+            "strike","mid","downside","delta","volume","openInterest",
+            "IV","ratio","return_pct","annualized_return","sweet","liquid"
+        ]]
+        .head(10)
+        .style
+        .format("{:.2f}")
+        .apply(highlight, axis=1),
+        use_container_width=True
+    )

@@ -14,23 +14,20 @@ st.title("📊 Options Strategy Scanner")
 ticker_symbol = st.text_input("Ticker", "APLD")
 cost = st.number_input("Cost Basis", value=27.0)
 
-# ========= 数据 =========
+# ========= 获取 expiration =========
 @st.cache_data(ttl=300)
-def get_option_chain(ticker_symbol, exp):
+def get_expirations(ticker_symbol):
     ticker = yf.Ticker(ticker_symbol)
-    for _ in range(3):
-        try:
-            return ticker.option_chain(exp)
-        except:
-            time.sleep(1)
-    return None
-
-ticker = yf.Ticker(ticker_symbol)
+    return ticker.options
 
 try:
-    expirations = ticker.options
+    expirations = get_expirations(ticker_symbol)
 except:
-    st.error("❌ Failed to fetch options")
+    st.error("❌ Failed to fetch expirations")
+    st.stop()
+
+if len(expirations) == 0:
+    st.error("❌ No options available")
     st.stop()
 
 exp = st.selectbox("Expiration", expirations)
@@ -50,27 +47,22 @@ def put_delta(S, K, T, r, sigma):
     d1 = (np.log(S / K) + (r + 0.5 * sigma**2) * T) / (sigma * np.sqrt(T))
     return norm.cdf(d1) - 1
 
-# ========= 高亮函数 =========
+# ========= 高亮 =========
 def highlight(row):
     styles = []
-
     for col in row.index:
         style = ""
 
-        # 🟢 最优（甜点区 + 流动性）
         if row["sweet"] and row["liquid"]:
-            style = "background-color: #d4edda"
+            style = "background-color: #d4edda"  # 🟢
 
-        # 🔥 高收益
-        if row["annualized_return"] > 20:
-            style = "background-color: #fff3cd"
+        elif row["annualized_return"] > 20:
+            style = "background-color: #fff3cd"  # 🟡
 
-        # ⚠️ 风险（不liquid）
-        if not row["liquid"]:
-            style = "background-color: #f8d7da"
+        elif not row["liquid"]:
+            style = "background-color: #f8d7da"  # 🔴
 
         styles.append(style)
-
     return styles
 
 # ========= 主逻辑 =========
@@ -78,13 +70,21 @@ if run:
 
     with st.spinner("Fetching data..."):
 
-        opt = get_option_chain(ticker_symbol, exp)
+        ticker = yf.Ticker(ticker_symbol)
+
+        # ❗ 不使用 cache（关键修复）
+        opt = None
+        for _ in range(3):
+            try:
+                opt = ticker.option_chain(exp)
+                break
+            except:
+                time.sleep(1)
 
         if opt is None:
             st.error("❌ Failed to fetch option chain")
             st.stop()
 
-        ticker = yf.Ticker(ticker_symbol)
         price = ticker.history(period="1d")["Close"].iloc[-1]
 
         expiration_date = datetime.strptime(exp, "%Y-%m-%d")
@@ -145,7 +145,6 @@ if run:
 
         puts["mid"] = (puts["bid"] + puts["ask"]) / 2
 
-        puts["moneyness"] = puts["downside"] / price
         puts["ratio"] = (puts["mid"] / puts["downside"]).round(2)
 
         puts["return_pct"] = (puts["mid"] / puts["strike"] * 100).round(2)

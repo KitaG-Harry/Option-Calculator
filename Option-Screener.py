@@ -122,7 +122,7 @@ if run:
         calls["mid"] = (calls["bid"] + calls["ask"]) / 2
         calls["ratio"] = calls["mid"] / calls["upside"]
 
-        # 收益拆分
+        # 收益拆分（核心）
         calls["ret_no_assign"] = calls["mid"] / cost * 100
         calls["ann_no_assign"] = calls["ret_no_assign"] / T
 
@@ -134,15 +134,11 @@ if run:
             axis=1
         )
 
+        # 👉 流动性数据（你自己判断）
         calls["spread"] = calls["ask"] - calls["bid"]
         calls["spread_pct"] = calls["spread"] / calls["mid"]
-
-        # 👉 liquidity 独立
-        calls["liquid"] = (
-            (calls["volume"] > 10) &
-            (calls["openInterest"] > 50) &
-            (calls["spread_pct"] < 0.3)
-        )
+        calls["volume"] = calls["volume"]
+        calls["OI"] = calls["openInterest"]
 
         # 👉 sweet 只看 delta
         calls["sweet"] = calls["delta"].between(0.25, 0.35)
@@ -161,7 +157,7 @@ if run:
             "strike","mid","delta","IV",
             "ret_no_assign","ann_no_assign",
             "ret_called","ann_called",
-            "ratio","liquid","sweet"
+            "ratio","volume","OI","spread_pct","sweet"
         ]].head(10).round(2)
 
         render_table(calls_display)
@@ -183,17 +179,12 @@ if run:
             axis=1
         )
 
+        # 👉 流动性数据
         puts["spread"] = puts["ask"] - puts["bid"]
         puts["spread_pct"] = puts["spread"] / puts["mid"]
+        puts["volume"] = puts["volume"]
+        puts["OI"] = puts["openInterest"]
 
-        # 👉 liquidity 独立
-        puts["liquid"] = (
-            (puts["volume"] > 10) &
-            (puts["openInterest"] > 50) &
-            (puts["spread_pct"] < 0.3)
-        )
-
-        # 👉 sweet 只看 delta
         puts["sweet"] = puts["delta"].abs().between(0.20, 0.30)
 
         puts["IV"] = puts["impliedVolatility"] * 100
@@ -208,7 +199,7 @@ if run:
         puts_display = puts[[
             "strike","mid","delta","IV",
             "return_pct","annualized_return",
-            "ratio","liquid","sweet"
+            "ratio","volume","OI","spread_pct","sweet"
         ]].head(10).round(2)
 
         render_table(puts_display)

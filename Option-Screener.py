@@ -121,7 +121,6 @@ if run:
 
         calls["mid"] = (calls["bid"] + calls["ask"]) / 2
 
-        # 收益拆分
         calls["ret_no_assign"] = calls["mid"] / cost * 100
         calls["ann_no_assign"] = calls["ret_no_assign"] / T
 
@@ -133,7 +132,6 @@ if run:
             axis=1
         )
 
-        # 流动性数据
         calls["spread"] = calls["ask"] - calls["bid"]
         calls["spread_pct"] = calls["spread"] / calls["mid"]
         calls["volume"] = calls["volume"]
@@ -145,12 +143,9 @@ if run:
             (calls["spread_pct"] < 0.3)
         )
 
-        # sweet 只看 delta
         calls["sweet"] = calls["delta"].between(0.25, 0.35)
-
         calls["IV"] = calls["impliedVolatility"] * 100
 
-        # ✅ 按 strike 排序
         calls = calls.sort_values("strike").reset_index(drop=True)
 
         if only_sweet:
@@ -196,11 +191,10 @@ if run:
         )
 
         puts["sweet"] = puts["delta"].abs().between(0.20, 0.30)
-
         puts["IV"] = puts["impliedVolatility"] * 100
 
-        # ✅ 按 strike 排序
-        puts = puts.sort_values("strike").reset_index(drop=True)
+        # ✅ 修正：PUT 按 strike 从高到低
+        puts = puts.sort_values("strike", ascending=False).reset_index(drop=True)
 
         if only_sweet:
             puts = puts[puts["sweet"]]

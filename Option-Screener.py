@@ -8,7 +8,7 @@ import time
 
 st.set_page_config(page_title="Options Scanner", layout="centered")
 
-st.title("📊 Options Strategy Scanner")
+st.title("📊 Options Strategy Scanner (Mobile Friendly)")
 
 # ========= 输入 =========
 ticker_symbol = st.text_input("Ticker", "APLD")
@@ -25,7 +25,6 @@ except:
     st.error("❌ Failed to fetch expirations")
     st.stop()
 
-# ===== 标记 weekly =====
 def is_weekly(exp_str):
     date = datetime.strptime(exp_str, "%Y-%m-%d")
     first_day = date.replace(day=1)
@@ -59,24 +58,6 @@ def put_delta(S, K, T, r, sigma):
     d1 = (np.log(S / K) + (r + 0.5 * sigma**2) * T) / (sigma * np.sqrt(T))
     return norm.cdf(d1) - 1
 
-# ========= 高亮 =========
-def highlight(row):
-    styles = []
-    for col in row.index:
-        style = ""
-
-        if row["sweet"] and row["liquid"]:
-            style = "background-color: #d4edda"  # 🟢
-
-        elif row["annualized_return"] > 20:
-            style = "background-color: #fff3cd"  # 🟡
-
-        elif not row["liquid"]:
-            style = "background-color: #f8d7da"  # 🔴
-
-        styles.append(style)
-    return styles
-
 # ========= 主逻辑 =========
 if run:
 
@@ -84,7 +65,6 @@ if run:
 
         ticker = yf.Ticker(ticker_symbol)
 
-        # retry option_chain
         opt = None
         for _ in range(3):
             try:
@@ -115,6 +95,18 @@ if run:
         calls = calls[calls["strike"] >= cost * 1.10]
 
         calls["mid"] = (calls["bid"] + calls["ask"]) / 2
+        calls["ratio"] = calls["mid"] / calls["upside"]
+
+        calls["return_pct"] = calls["mid"] / cost * 100
+        calls["annualized_return"] = calls["return_pct"] / T
+
+        calls["delta"] = calls.apply(
+            lambda row: call_delta(price, row["strike"], T, r, row["impliedVolatility"]),
+            axis=1
+        )
+
+        calls["sweet"] = calls["delta"].between(0.25, 0.35)
+
         calls["spread"] = calls["ask"] - calls["bid"]
         calls["spread_pct"] = calls["spread"] / calls["mid"]
 
@@ -124,25 +116,33 @@ if run:
             (calls["spread_pct"] < 0.3)
         )
 
-        calls["call_profit"] = (calls["strike"] - cost) + calls["mid"]
-        calls["call_return_pct"] = (calls["call_profit"] / cost * 100)
-        calls["call_annualized"] = (calls["call_return_pct"] / T)
-
-        calls["ratio"] = (calls["mid"] / calls["upside"])
-
-        calls["delta"] = calls.apply(
-            lambda row: call_delta(price, row["strike"], T, r, row["impliedVolatility"]),
-            axis=1
-        )
-
-        calls["sweet"] = calls["delta"].between(0.25, 0.35)
-
-        calls["return_pct"] = (calls["mid"] / cost * 100)
-        calls["annualized_return"] = (calls["return_pct"] / T)
-
         calls["IV"] = calls["impliedVolatility"] * 100
 
         calls = calls.sort_values("ratio", ascending=False).reset_index(drop=True)
+
+        # ========= 标签 =========
+        calls["tag"] = calls.apply(
+            lambda row: "🟢Sweet+Liquid"
+            if row["sweet"] and row["liquid"]
+            else "🟡HighReturn"
+            if row["annualized_return"] > 20
+            else "🔴Illiquid"
+            if not row["liquid"]
+            else "",
+            axis=1
+        )
+
+        st.divider()
+        st.subheader("🔵 Covered Call")
+
+        st.table(
+            calls[[
+                "strike","mid","delta","IV",
+                "return_pct","annualized_return","ratio","tag"
+            ]]
+            .head(10)
+            .round(2)
+        )
 
         # ================= PUT =================
         puts = opt.puts.copy()
@@ -151,10 +151,10 @@ if run:
         puts = puts[puts["downside"] > 0]
 
         puts["mid"] = (puts["bid"] + puts["ask"]) / 2
-        puts["ratio"] = (puts["mid"] / puts["downside"])
+        puts["ratio"] = puts["mid"] / puts["downside"]
 
-        puts["return_pct"] = (puts["mid"] / puts["strike"] * 100)
-        puts["annualized_return"] = (puts["return_pct"] / T)
+        puts["return_pct"] = puts["mid"] / puts["strike"] * 100
+        puts["annualized_return"] = puts["return_pct"] / T
 
         puts["delta"] = puts.apply(
             lambda row: put_delta(price, row["strike"], T, r, row["impliedVolatility"]),
@@ -176,35 +176,24 @@ if run:
 
         puts = puts.sort_values("ratio", ascending=False).reset_index(drop=True)
 
-    st.divider()
+        puts["tag"] = puts.apply(
+            lambda row: "🟢Sweet+Liquid"
+            if row["sweet"] and row["liquid"]
+            else "🟡HighReturn"
+            if row["annualized_return"] > 20
+            else "🔴Illiquid"
+            if not row["liquid"]
+            else "",
+            axis=1
+        )
 
-    # ========= CALL =========
-    st.subheader("🔵 Covered Call")
+        st.subheader("🟢 Cash Secured Put")
 
-    st.dataframe(
-        calls[[
-            "strike","mid","upside","delta","volume","openInterest",
-            "IV","ratio","return_pct","annualized_return",
-            "call_return_pct","call_annualized","sweet","liquid"
-        ]]
-        .head(10)
-        .style
-        .format("{:.2f}")
-        .apply(highlight, axis=1),
-        use_container_width=True
-    )
-
-    # ========= PUT =========
-    st.subheader("🟢 Cash Secured Put")
-
-    st.dataframe(
-        puts[[
-            "strike","mid","downside","delta","volume","openInterest",
-            "IV","ratio","return_pct","annualized_return","sweet","liquid"
-        ]]
-        .head(10)
-        .style
-        .format("{:.2f}")
-        .apply(highlight, axis=1),
-        use_container_width=True
-    )
+        st.table(
+            puts[[
+                "strike","mid","delta","IV",
+                "return_pct","annualized_return","ratio","tag"
+            ]]
+            .head(10)
+            .round(2)
+        )

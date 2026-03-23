@@ -15,7 +15,7 @@ ticker_symbol = st.text_input("Ticker", "APLD")
 cost = st.number_input("Cost Basis", value=27.0)
 
 # ========= 过滤 =========
-only_sweet = st.toggle("Only show sweet (recommended execution zone)", value=False)
+only_sweet = st.toggle("Only show delta sweet zone", value=False)
 
 # ========= expiration =========
 def get_expirations(ticker_symbol):
@@ -122,11 +122,10 @@ if run:
         calls["mid"] = (calls["bid"] + calls["ask"]) / 2
         calls["ratio"] = calls["mid"] / calls["upside"]
 
-        # ✅ 不被行权收益（关键）
+        # 收益拆分
         calls["ret_no_assign"] = calls["mid"] / cost * 100
         calls["ann_no_assign"] = calls["ret_no_assign"] / T
 
-        # ✅ 被行权收益（完整收益）
         calls["ret_called"] = ((calls["strike"] - cost) + calls["mid"]) / cost * 100
         calls["ann_called"] = calls["ret_called"] / T
 
@@ -138,12 +137,14 @@ if run:
         calls["spread"] = calls["ask"] - calls["bid"]
         calls["spread_pct"] = calls["spread"] / calls["mid"]
 
+        # 👉 liquidity 独立
         calls["liquid"] = (
             (calls["volume"] > 10) &
             (calls["openInterest"] > 50) &
             (calls["spread_pct"] < 0.3)
         )
 
+        # 👉 sweet 只看 delta
         calls["sweet"] = calls["delta"].between(0.25, 0.35)
 
         calls["IV"] = calls["impliedVolatility"] * 100
@@ -160,7 +161,7 @@ if run:
             "strike","mid","delta","IV",
             "ret_no_assign","ann_no_assign",
             "ret_called","ann_called",
-            "ratio","sweet"
+            "ratio","liquid","sweet"
         ]].head(10).round(2)
 
         render_table(calls_display)
@@ -185,12 +186,14 @@ if run:
         puts["spread"] = puts["ask"] - puts["bid"]
         puts["spread_pct"] = puts["spread"] / puts["mid"]
 
+        # 👉 liquidity 独立
         puts["liquid"] = (
             (puts["volume"] > 10) &
             (puts["openInterest"] > 50) &
             (puts["spread_pct"] < 0.3)
         )
 
+        # 👉 sweet 只看 delta
         puts["sweet"] = puts["delta"].abs().between(0.20, 0.30)
 
         puts["IV"] = puts["impliedVolatility"] * 100
@@ -204,7 +207,8 @@ if run:
 
         puts_display = puts[[
             "strike","mid","delta","IV",
-            "return_pct","annualized_return","ratio","sweet"
+            "return_pct","annualized_return",
+            "ratio","liquid","sweet"
         ]].head(10).round(2)
 
         render_table(puts_display)

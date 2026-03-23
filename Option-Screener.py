@@ -120,9 +120,8 @@ if run:
         calls = calls[calls["strike"] >= cost * 1.10]
 
         calls["mid"] = (calls["bid"] + calls["ask"]) / 2
-        calls["ratio"] = calls["mid"] / calls["upside"]
 
-        # 收益拆分（核心）
+        # 收益拆分
         calls["ret_no_assign"] = calls["mid"] / cost * 100
         calls["ann_no_assign"] = calls["ret_no_assign"] / T
 
@@ -134,18 +133,25 @@ if run:
             axis=1
         )
 
-        # 👉 流动性数据（你自己判断）
+        # 流动性数据
         calls["spread"] = calls["ask"] - calls["bid"]
         calls["spread_pct"] = calls["spread"] / calls["mid"]
         calls["volume"] = calls["volume"]
         calls["OI"] = calls["openInterest"]
 
-        # 👉 sweet 只看 delta
+        calls["liquid"] = (
+            (calls["volume"] > 10) &
+            (calls["OI"] > 50) &
+            (calls["spread_pct"] < 0.3)
+        )
+
+        # sweet 只看 delta
         calls["sweet"] = calls["delta"].between(0.25, 0.35)
 
         calls["IV"] = calls["impliedVolatility"] * 100
 
-        calls = calls.sort_values("ratio", ascending=False).reset_index(drop=True)
+        # ✅ 按 strike 排序
+        calls = calls.sort_values("strike").reset_index(drop=True)
 
         if only_sweet:
             calls = calls[calls["sweet"]]
@@ -157,8 +163,8 @@ if run:
             "strike","mid","delta","IV",
             "ret_no_assign","ann_no_assign",
             "ret_called","ann_called",
-            "ratio","volume","OI","spread_pct","sweet"
-        ]].head(10).round(2)
+            "volume","OI","spread_pct","liquid","sweet"
+        ]].head(15).round(2)
 
         render_table(calls_display)
 
@@ -169,7 +175,6 @@ if run:
         puts = puts[puts["downside"] > 0]
 
         puts["mid"] = (puts["bid"] + puts["ask"]) / 2
-        puts["ratio"] = puts["mid"] / puts["downside"]
 
         puts["return_pct"] = puts["mid"] / puts["strike"] * 100
         puts["annualized_return"] = puts["return_pct"] / T
@@ -179,17 +184,23 @@ if run:
             axis=1
         )
 
-        # 👉 流动性数据
         puts["spread"] = puts["ask"] - puts["bid"]
         puts["spread_pct"] = puts["spread"] / puts["mid"]
         puts["volume"] = puts["volume"]
         puts["OI"] = puts["openInterest"]
 
+        puts["liquid"] = (
+            (puts["volume"] > 10) &
+            (puts["OI"] > 50) &
+            (puts["spread_pct"] < 0.3)
+        )
+
         puts["sweet"] = puts["delta"].abs().between(0.20, 0.30)
 
         puts["IV"] = puts["impliedVolatility"] * 100
 
-        puts = puts.sort_values("ratio", ascending=False).reset_index(drop=True)
+        # ✅ 按 strike 排序
+        puts = puts.sort_values("strike").reset_index(drop=True)
 
         if only_sweet:
             puts = puts[puts["sweet"]]
@@ -199,7 +210,7 @@ if run:
         puts_display = puts[[
             "strike","mid","delta","IV",
             "return_pct","annualized_return",
-            "ratio","volume","OI","spread_pct","sweet"
-        ]].head(10).round(2)
+            "volume","OI","spread_pct","liquid","sweet"
+        ]].head(15).round(2)
 
         render_table(puts_display)

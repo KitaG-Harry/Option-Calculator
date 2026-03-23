@@ -7,15 +7,13 @@ from datetime import datetime
 import time
 
 st.set_page_config(page_title="Options Scanner", layout="wide")
-
 st.title("📊 Options Strategy Scanner")
 
 # ========= 输入 =========
 ticker_symbol = st.text_input("Ticker", "APLD")
 cost = st.number_input("Cost Basis", value=27.0)
 
-# ========= 获取 expiration =========
-@st.cache_data(ttl=300)
+# ========= expiration =========
 def get_expirations(ticker_symbol):
     ticker = yf.Ticker(ticker_symbol)
     return ticker.options
@@ -26,11 +24,24 @@ except:
     st.error("❌ Failed to fetch expirations")
     st.stop()
 
-if len(expirations) == 0:
-    st.error("❌ No options available")
-    st.stop()
+# ===== 标记 weekly =====
+def is_weekly(exp_str):
+    date = datetime.strptime(exp_str, "%Y-%m-%d")
+    first_day = date.replace(day=1)
+    first_friday_offset = (4 - first_day.weekday()) % 7
+    third_friday = first_day.day + first_friday_offset + 14
+    return date.day != third_friday
 
-exp = st.selectbox("Expiration", expirations)
+exp_display = []
+exp_map = {}
+
+for e in expirations:
+    label = f"{e} (W)" if is_weekly(e) else e
+    exp_display.append(label)
+    exp_map[label] = e
+
+selected_label = st.selectbox("Expiration", exp_display)
+exp = exp_map[selected_label]
 
 run = st.button("Run Analysis")
 
@@ -54,16 +65,23 @@ def highlight(row):
         style = ""
 
         if row["sweet"] and row["liquid"]:
-            style = "background-color: #d4edda"  # 🟢
+            style = "background-color: #d4edda"  # 绿
 
         elif row["annualized_return"] > 20:
-            style = "background-color: #fff3cd"  # 🟡
+            style = "background-color: #fff3cd"  # 黄
 
         elif not row["liquid"]:
-            style = "background-color: #f8d7da"  # 🔴
+            style = "background-color: #f8d7da"  # 红
 
         styles.append(style)
     return styles
+
+# ========= 数字格式 =========
+def format_df(df):
+    df = df.copy()
+    num_cols = df.select_dtypes(include=[np.number]).columns
+    df[num_cols] = df[num_cols].round(2)
+    return df
 
 # ========= 主逻辑 =========
 if run:
@@ -72,7 +90,7 @@ if run:
 
         ticker = yf.Ticker(ticker_symbol)
 
-        # ❗ 不使用 cache（关键修复）
+        # retry option_chain
         opt = None
         for _ in range(3):
             try:
@@ -95,9 +113,7 @@ if run:
         st.write(f"Price: {price:.2f}")
         st.write(f"DTE: {T*365:.0f} days")
 
-        # =========================
-        # 🔵 CALL
-        # =========================
+        # ================= CALL =================
         calls = opt.calls.copy()
 
         calls["upside"] = calls["strike"] - price
@@ -105,7 +121,6 @@ if run:
         calls = calls[calls["strike"] >= cost * 1.10]
 
         calls["mid"] = (calls["bid"] + calls["ask"]) / 2
-
         calls["spread"] = calls["ask"] - calls["bid"]
         calls["spread_pct"] = calls["spread"] / calls["mid"]
 
@@ -116,44 +131,41 @@ if run:
         )
 
         calls["call_profit"] = (calls["strike"] - cost) + calls["mid"]
-        calls["call_return_pct"] = (calls["call_profit"] / cost * 100).round(2)
-        calls["call_annualized"] = (calls["call_return_pct"] / T).round(2)
+        calls["call_return_pct"] = (calls["call_profit"] / cost * 100)
+        calls["call_annualized"] = (calls["call_return_pct"] / T)
 
-        calls["ratio"] = (calls["mid"] / calls["upside"]).round(2)
+        calls["ratio"] = (calls["mid"] / calls["upside"])
 
         calls["delta"] = calls.apply(
             lambda row: call_delta(price, row["strike"], T, r, row["impliedVolatility"]),
             axis=1
-        ).round(2)
+        )
 
         calls["sweet"] = calls["delta"].between(0.30, 0.40)
 
-        calls["return_pct"] = (calls["mid"] / cost * 100).round(2)
-        calls["annualized_return"] = (calls["return_pct"] / T).round(2)
+        calls["return_pct"] = (calls["mid"] / cost * 100)
+        calls["annualized_return"] = (calls["return_pct"] / T)
 
-        calls["IV"] = (calls["impliedVolatility"] * 100).round(1)
+        calls["IV"] = calls["impliedVolatility"] * 100
 
         calls = calls.sort_values("ratio", ascending=False).reset_index(drop=True)
 
-        # =========================
-        # 🟢 PUT
-        # =========================
+        # ================= PUT =================
         puts = opt.puts.copy()
 
         puts["downside"] = price - puts["strike"]
         puts = puts[puts["downside"] > 0]
 
         puts["mid"] = (puts["bid"] + puts["ask"]) / 2
+        puts["ratio"] = (puts["mid"] / puts["downside"])
 
-        puts["ratio"] = (puts["mid"] / puts["downside"]).round(2)
-
-        puts["return_pct"] = (puts["mid"] / puts["strike"] * 100).round(2)
-        puts["annualized_return"] = (puts["return_pct"] / T).round(2)
+        puts["return_pct"] = (puts["mid"] / puts["strike"] * 100)
+        puts["annualized_return"] = (puts["return_pct"] / T)
 
         puts["delta"] = puts.apply(
             lambda row: put_delta(price, row["strike"], T, r, row["impliedVolatility"]),
             axis=1
-        ).round(2)
+        )
 
         puts["sweet"] = puts["delta"].abs().between(0.30, 0.40)
 
@@ -166,11 +178,10 @@ if run:
             (puts["spread_pct"] < 0.3)
         )
 
-        puts["IV"] = (puts["impliedVolatility"] * 100).round(1)
+        puts["IV"] = puts["impliedVolatility"] * 100
 
         puts = puts.sort_values("ratio", ascending=False).reset_index(drop=True)
 
-    # ========= UI =========
     st.divider()
 
     st.markdown("""
@@ -183,25 +194,27 @@ if run:
 
     with col1:
         st.subheader("🔵 Covered Call")
-        st.dataframe(
+        calls_display = format_df(
             calls[[
                 "strike","mid","upside","delta","volume","openInterest",
                 "IV","ratio","return_pct","annualized_return",
                 "call_return_pct","call_annualized","sweet","liquid"
-            ]]
-            .head(10)
-            .style.apply(highlight, axis=1),
+            ]].head(10)
+        )
+        st.dataframe(
+            calls_display.style.apply(highlight, axis=1),
             use_container_width=True
         )
 
     with col2:
         st.subheader("🟢 Cash Secured Put")
-        st.dataframe(
+        puts_display = format_df(
             puts[[
                 "strike","mid","downside","delta","volume","openInterest",
                 "IV","ratio","return_pct","annualized_return","sweet","liquid"
-            ]]
-            .head(10)
-            .style.apply(highlight, axis=1),
+            ]].head(10)
+        )
+        st.dataframe(
+            puts_display.style.apply(highlight, axis=1),
             use_container_width=True
         )

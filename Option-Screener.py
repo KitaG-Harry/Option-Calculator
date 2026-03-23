@@ -50,6 +50,29 @@ def put_delta(S, K, T, r, sigma):
     d1 = (np.log(S / K) + (r + 0.5 * sigma**2) * T) / (sigma * np.sqrt(T))
     return norm.cdf(d1) - 1
 
+# ========= 高亮函数 =========
+def highlight(row):
+    styles = []
+
+    for col in row.index:
+        style = ""
+
+        # 🟢 最优（甜点区 + 流动性）
+        if row["sweet"] and row["liquid"]:
+            style = "background-color: #d4edda"
+
+        # 🔥 高收益
+        if row["annualized_return"] > 20:
+            style = "background-color: #fff3cd"
+
+        # ⚠️ 风险（不liquid）
+        if not row["liquid"]:
+            style = "background-color: #f8d7da"
+
+        styles.append(style)
+
+    return styles
+
 # ========= 主逻辑 =========
 if run:
 
@@ -112,28 +135,6 @@ if run:
 
         calls = calls.sort_values("ratio", ascending=False).reset_index(drop=True)
 
-        def highlight_calls(row):
-          styles = []
-
-        for col in row.index:
-          style = ""
-
-        # 🟢 最优组合
-          if row["sweet"] and row["liquid"]:
-              style = "background-color: #d4edda"  # 绿
-  
-          # 🔥 高收益
-          if row["annualized_return"] > 20:
-              style = "background-color: #fff3cd"  # 黄
-  
-          # ⚠️ 流动性差
-          if not row["liquid"]:
-              style = "background-color: #f8d7da"  # 红
-  
-          styles.append(style)
-
-        return styles
-
         # =========================
         # 🟢 PUT
         # =========================
@@ -170,51 +171,38 @@ if run:
 
         puts = puts.sort_values("ratio", ascending=False).reset_index(drop=True)
 
-        def highlight_puts(row):
-            styles = []
-        
-            for col in row.index:
-                style = ""
-        
-                if row["sweet"] and row["liquid"]:
-                    style = "background-color: #d4edda"
-        
-                if row["annualized_return"] > 15:
-                    style = "background-color: #fff3cd"
-        
-                if not row["liquid"]:
-                    style = "background-color: #f8d7da"
-        
-                styles.append(style)
-        
-            return styles
-
     # ========= UI =========
     st.divider()
+
+    st.markdown("""
+    🟢 Best (sweet + liquid)  
+    🟡 High Return (>20%)  
+    🔴 Low Liquidity  
+    """)
 
     col1, col2 = st.columns(2)
 
     with col1:
         st.subheader("🔵 Covered Call")
-st.dataframe(
-    calls[[
-        "strike","mid","upside","delta","volume","openInterest",
-        "IV","ratio","return_pct","annualized_return",
-        "call_return_pct","call_annualized","sweet","liquid"
-    ]]
-    .head(10)
-    .style.apply(highlight_calls, axis=1),
-    use_container_width=True
-)
+        st.dataframe(
+            calls[[
+                "strike","mid","upside","delta","volume","openInterest",
+                "IV","ratio","return_pct","annualized_return",
+                "call_return_pct","call_annualized","sweet","liquid"
+            ]]
+            .head(10)
+            .style.apply(highlight, axis=1),
+            use_container_width=True
+        )
+
     with col2:
         st.subheader("🟢 Cash Secured Put")
-st.dataframe(
-    puts[[
-        "strike","mid","downside","delta","volume","openInterest",
-        "IV","ratio","return_pct","annualized_return","sweet","liquid"
-    ]]
-    .head(10)
-    .style.apply(highlight_puts, axis=1),
-    use_container_width=True
-)
-        
+        st.dataframe(
+            puts[[
+                "strike","mid","downside","delta","volume","openInterest",
+                "IV","ratio","return_pct","annualized_return","sweet","liquid"
+            ]]
+            .head(10)
+            .style.apply(highlight, axis=1),
+            use_container_width=True
+        )

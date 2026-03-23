@@ -8,7 +8,7 @@ import time
 
 st.set_page_config(page_title="Options Scanner", layout="centered")
 
-st.title("📊 Options Strategy Scanner (Mobile Friendly)")
+st.title("📊 Options Strategy Scanner")
 
 # ========= 输入 =========
 ticker_symbol = st.text_input("Ticker", "APLD")
@@ -58,6 +58,30 @@ def put_delta(S, K, T, r, sigma):
     d1 = (np.log(S / K) + (r + 0.5 * sigma**2) * T) / (sigma * np.sqrt(T))
     return norm.cdf(d1) - 1
 
+# ========= HTML 表格 =========
+def render_table(df, sweet_col="sweet"):
+    html = "<table style='width:100%; border-collapse: collapse;'>"
+
+    # 表头
+    html += "<tr>"
+    for col in df.columns:
+        html += f"<th style='border:1px solid #ccc; padding:6px; text-align:center;'>{col}</th>"
+    html += "</tr>"
+
+    # 行
+    for _, row in df.iterrows():
+        is_sweet = row.get(sweet_col, False)
+        style = "font-weight:bold;" if is_sweet else ""
+
+        html += f"<tr style='{style}'>"
+        for val in row:
+            html += f"<td style='border:1px solid #ccc; padding:6px; text-align:center;'>{val}</td>"
+        html += "</tr>"
+
+    html += "</table>"
+
+    st.markdown(html, unsafe_allow_html=True)
+
 # ========= 主逻辑 =========
 if run:
 
@@ -105,8 +129,6 @@ if run:
             axis=1
         )
 
-        calls["sweet"] = calls["delta"].between(0.25, 0.35)
-
         calls["spread"] = calls["ask"] - calls["bid"]
         calls["spread_pct"] = calls["spread"] / calls["mid"]
 
@@ -116,33 +138,22 @@ if run:
             (calls["spread_pct"] < 0.3)
         )
 
+        # 👉 sweet = delta + 流动性
+        calls["sweet"] = calls["delta"].between(0.25, 0.35) & calls["liquid"]
+
         calls["IV"] = calls["impliedVolatility"] * 100
 
         calls = calls.sort_values("ratio", ascending=False).reset_index(drop=True)
 
-        # ========= 标签 =========
-        calls["tag"] = calls.apply(
-            lambda row: "🟢Sweet+Liquid"
-            if row["sweet"] and row["liquid"]
-            else "🟡HighReturn"
-            if row["annualized_return"] > 20
-            else "🔴Illiquid"
-            if not row["liquid"]
-            else "",
-            axis=1
-        )
-
         st.divider()
         st.subheader("🔵 Covered Call")
 
-        st.table(
-            calls[[
-                "strike","mid","delta","IV",
-                "return_pct","annualized_return","ratio","tag"
-            ]]
-            .head(10)
-            .round(2)
-        )
+        calls_display = calls[[
+            "strike","mid","delta","IV",
+            "return_pct","annualized_return","ratio","sweet"
+        ]].head(10).round(2)
+
+        render_table(calls_display)
 
         # ================= PUT =================
         puts = opt.puts.copy()
@@ -161,8 +172,6 @@ if run:
             axis=1
         )
 
-        puts["sweet"] = puts["delta"].abs().between(0.20, 0.30)
-
         puts["spread"] = puts["ask"] - puts["bid"]
         puts["spread_pct"] = puts["spread"] / puts["mid"]
 
@@ -172,28 +181,17 @@ if run:
             (puts["spread_pct"] < 0.3)
         )
 
+        puts["sweet"] = puts["delta"].abs().between(0.20, 0.30) & puts["liquid"]
+
         puts["IV"] = puts["impliedVolatility"] * 100
 
         puts = puts.sort_values("ratio", ascending=False).reset_index(drop=True)
 
-        puts["tag"] = puts.apply(
-            lambda row: "🟢Sweet+Liquid"
-            if row["sweet"] and row["liquid"]
-            else "🟡HighReturn"
-            if row["annualized_return"] > 20
-            else "🔴Illiquid"
-            if not row["liquid"]
-            else "",
-            axis=1
-        )
-
         st.subheader("🟢 Cash Secured Put")
 
-        st.table(
-            puts[[
-                "strike","mid","delta","IV",
-                "return_pct","annualized_return","ratio","tag"
-            ]]
-            .head(10)
-            .round(2)
-        )
+        puts_display = puts[[
+            "strike","mid","delta","IV",
+            "return_pct","annualized_return","ratio","sweet"
+        ]].head(10).round(2)
+
+        render_table(puts_display)

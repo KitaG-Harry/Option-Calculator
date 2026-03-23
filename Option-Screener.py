@@ -144,7 +144,7 @@ if run:
             (calls["spread_pct"] < 0.3)
         )
 
-        calls["sweet"] = calls["delta"].between(0.25, 0.35) & calls["liquid"]
+        calls["sweet"] = calls["delta"].between(0.25, 0.35)
 
         calls["IV"] = calls["impliedVolatility"] * 100
 
@@ -191,7 +191,7 @@ if run:
             (puts["spread_pct"] < 0.3)
         )
 
-        puts["sweet"] = puts["delta"].abs().between(0.20, 0.30) & puts["liquid"]
+        puts["sweet"] = puts["delta"].abs().between(0.20, 0.30)
 
         puts["IV"] = puts["impliedVolatility"] * 100
 

@@ -135,7 +135,7 @@ if run:
             axis=1
         )
 
-        calls["sweet"] = calls["delta"].between(0.30, 0.40)
+        calls["sweet"] = calls["delta"].between(0.25, 0.35)
 
         calls["return_pct"] = (calls["mid"] / cost * 100)
         calls["annualized_return"] = (calls["return_pct"] / T)
@@ -161,7 +161,7 @@ if run:
             axis=1
         )
 
-        puts["sweet"] = puts["delta"].abs().between(0.30, 0.40)
+        puts["sweet"] = puts["delta"].abs().between(0.20, 0.30)
 
         puts["spread"] = puts["ask"] - puts["bid"]
         puts["spread_pct"] = puts["spread"] / puts["mid"]
@@ -177,12 +177,6 @@ if run:
         puts = puts.sort_values("ratio", ascending=False).reset_index(drop=True)
 
     st.divider()
-
-    st.markdown("""
-    🟢 Best (sweet + liquid)  
-    🟡 High Return (>20%)  
-    🔴 Low Liquidity  
-    """)
 
     # ========= CALL =========
     st.subheader("🔵 Covered Call")

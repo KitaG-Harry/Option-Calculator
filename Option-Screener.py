@@ -14,6 +14,9 @@ st.title("📊 Options Strategy Scanner")
 ticker_symbol = st.text_input("Ticker", "APLD")
 cost = st.number_input("Cost Basis", value=27.0)
 
+# ========= 过滤 =========
+only_sweet = st.toggle("Only show sweet (recommended execution zone)", value=False)
+
 # ========= expiration =========
 def get_expirations(ticker_symbol):
     ticker = yf.Ticker(ticker_symbol)
@@ -62,13 +65,11 @@ def put_delta(S, K, T, r, sigma):
 def render_table(df, sweet_col="sweet"):
     html = "<table style='width:100%; border-collapse: collapse;'>"
 
-    # 表头
     html += "<tr>"
     for col in df.columns:
         html += f"<th style='border:1px solid #ccc; padding:6px; text-align:center;'>{col}</th>"
     html += "</tr>"
 
-    # 行
     for _, row in df.iterrows():
         is_sweet = row.get(sweet_col, False)
         style = "font-weight:bold;" if is_sweet else ""
@@ -121,8 +122,13 @@ if run:
         calls["mid"] = (calls["bid"] + calls["ask"]) / 2
         calls["ratio"] = calls["mid"] / calls["upside"]
 
-        calls["return_pct"] = calls["mid"] / cost * 100
-        calls["annualized_return"] = calls["return_pct"] / T
+        # ✅ 不被行权收益（关键）
+        calls["ret_no_assign"] = calls["mid"] / cost * 100
+        calls["ann_no_assign"] = calls["ret_no_assign"] / T
+
+        # ✅ 被行权收益（完整收益）
+        calls["ret_called"] = ((calls["strike"] - cost) + calls["mid"]) / cost * 100
+        calls["ann_called"] = calls["ret_called"] / T
 
         calls["delta"] = calls.apply(
             lambda row: call_delta(price, row["strike"], T, r, row["impliedVolatility"]),
@@ -138,19 +144,23 @@ if run:
             (calls["spread_pct"] < 0.3)
         )
 
-        # 👉 sweet = delta + 流动性
         calls["sweet"] = calls["delta"].between(0.25, 0.35) & calls["liquid"]
 
         calls["IV"] = calls["impliedVolatility"] * 100
 
         calls = calls.sort_values("ratio", ascending=False).reset_index(drop=True)
 
+        if only_sweet:
+            calls = calls[calls["sweet"]]
+
         st.divider()
         st.subheader("🔵 Covered Call")
 
         calls_display = calls[[
             "strike","mid","delta","IV",
-            "return_pct","annualized_return","ratio","sweet"
+            "ret_no_assign","ann_no_assign",
+            "ret_called","ann_called",
+            "ratio","sweet"
         ]].head(10).round(2)
 
         render_table(calls_display)
@@ -186,6 +196,9 @@ if run:
         puts["IV"] = puts["impliedVolatility"] * 100
 
         puts = puts.sort_values("ratio", ascending=False).reset_index(drop=True)
+
+        if only_sweet:
+            puts = puts[puts["sweet"]]
 
         st.subheader("🟢 Cash Secured Put")
 
